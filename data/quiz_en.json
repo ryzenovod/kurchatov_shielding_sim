@@ -1,0 +1,74 @@
+{
+  "questions": [
+    {
+      "text": "Why does the dose rate from a point source fall as 1/r²?",
+      "options": [
+        "Because of friction",
+        "Because the surface area grows as r²",
+        "Because it's customary"
+      ],
+      "answer": "Because the surface area grows as r²",
+      "explain": "Flux spreads over the sphere 4πr², hence the 1/r² dependence."
+    },
+    {
+      "text": "Which formula does the simulator use for attenuation?",
+      "options": [
+        "D = k·r²",
+        "D = k·exp(+Σμx)",
+        "D = k·exp(−Σμx)/r²"
+      ],
+      "answer": "D = k·exp(−Σμx)/r²",
+      "explain": "Exponential attenuation and geometric decrease with distance."
+    },
+    {
+      "text": "Which material is educationally more effective for beta component?",
+      "options": [
+        "Lead",
+        "Acrylic/glass",
+        "Steel"
+      ],
+      "answer": "Acrylic/glass",
+      "explain": "For beta, low‑Z materials are preferred; lead may increase bremsstrahlung."
+    },
+    {
+      "text": "Why do we introduce the D_safe threshold?",
+      "options": [
+        "For aesthetics",
+        "To classify zones and make decisions",
+        "To hide model errors"
+      ],
+      "answer": "To classify zones and make decisions",
+      "explain": "The threshold visualizes 'conditionally safe' vs 'needs action'."
+    },
+    {
+      "text": "What happens to D(r) if any screen is thickened by Δx with others fixed?",
+      "options": [
+        "It increases",
+        "It does not change",
+        "It decreases"
+      ],
+      "answer": "It decreases",
+      "explain": "exp(−μ (x+Δx)) < exp(−μ x)."
+    },
+    {
+      "text": "Why doesn't the order of layers matter in our model?",
+      "options": [
+        "Because μ=0",
+        "Σμx is commutative in the exponent",
+        "Order is always crucial"
+      ],
+      "answer": "Σμx is commutative in the exponent",
+      "explain": "exp(−(μ1x1+μ2x2)) = exp(−μ1x1)·exp(−μ2x2)."
+    },
+    {
+      "text": "Which parameter is NOT user‑adjustable in this version?",
+      "options": [
+        "Source strength k",
+        "Distance r",
+        "Spectrum energy"
+      ],
+      "answer": "Spectrum energy",
+      "explain": "Spectral effects are out of scope — an educational simplification."
+    }
+  ]
+}

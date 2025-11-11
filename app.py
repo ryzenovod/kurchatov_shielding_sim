@@ -2,10 +2,10 @@ import json, os, io
 import plotly.graph_objects as go
 import pandas as pd
 import streamlit as st
+from datetime import datetime
 from model import MATERIALS, ShieldLayer, dose, dose_curve, classify_zone
 from retriever import QAIndex
 
-# --- i18n ---
 TEXTS = {
     "RU": {
         "page_title": "Экранирование и доза — симулятор",
@@ -13,6 +13,7 @@ TEXTS = {
         "k_label": "Мощность источника k (отн.)",
         "r_label": "Текущее расстояние r (м)",
         "D_safe_label": "Порог безопасной зоны D_safe (отн.)",
+        "rad_type": "Вид излучения / Radiation type",
         "shielding_subheader": "Экранирование (до 3 слоёв)",
         "num_layers": "Число слоёв",
         "material_layer": "Материал слоя",
@@ -38,7 +39,7 @@ TEXTS = {
         "assistant_empty": "База знаний не загружена или пуста.",
         "assistant_nearest_question": "Ближайший вопрос:",
         "assistant_similarity": "Сходство (TF-IDF)",
-        "version_caption": "Версия каркаса: 1.2, экспорт PNG+CSV, RU/EN"
+        "version_caption": "Версия каркаса: 1.3, PNG+CSV, RU/EN, типы излучений"
     },
     "EN": {
         "page_title": "Shielding & Dose — Simulator",
@@ -46,6 +47,7 @@ TEXTS = {
         "k_label": "Source strength k (rel.)",
         "r_label": "Current distance r (m)",
         "D_safe_label": "Safe threshold D_safe (rel.)",
+        "rad_type": "Radiation type",
         "shielding_subheader": "Shielding (up to 3 layers)",
         "num_layers": "Number of layers",
         "material_layer": "Layer material",
@@ -71,14 +73,28 @@ TEXTS = {
         "assistant_empty": "Knowledge base is not loaded or empty.",
         "assistant_nearest_question": "Nearest question:",
         "assistant_similarity": "Similarity (TF-IDF)",
-        "version_caption": "Framework version: 1.2, PNG+CSV export, RU/EN"
+        "version_caption": "Framework version: 1.3, PNG+CSV, RU/EN, radiation types"
+    }
+}
+
+HINTS = {
+    "RU": {
+        "Гамма": "Гамма: чем выше плотность и Z — тем лучше (свинец, сталь). Вода/бетон/акрил — слабее.",
+        "Бета": "Бета: предпочтительны низко-Z (акрил/стекло, вода). Свинец может усиливать тормозное излучение (учебно).",
+        "Альфа": "Альфа: гасятся очень тонкими слоями; любой твёрдый материал с малой толщиной работает.",
+        "Нейтроны": "Нейтроны: лучше водородсодержащие материалы (вода, бетон). Металлы — хуже."
+    },
+    "EN": {
+        "Гамма": "Gamma: higher density and Z are better (lead, steel). Water/concrete/acrylic are weaker.",
+        "Бета": "Beta: prefer low-Z (acrylic/glass, water). Lead may increase bremsstrahlung (educational simplification).",
+        "Альфа": "Alpha: stopped by very thin layers; almost any solid with small thickness works.",
+        "Нейтроны": "Neutrons: hydrogen-rich materials are better (water, concrete). Metals are worse."
     }
 }
 
 def T(lang, key):
     return TEXTS.get(lang, TEXTS["RU"]).get(key, key)
 
-# --- Page config & language switch ---
 st.set_page_config(page_title="Shielding Simulator", layout="wide")
 lang = st.sidebar.selectbox("Язык / Language", ["RU", "EN"], index=0)
 
@@ -91,8 +107,8 @@ def load_qa_index():
 
 qa_index = load_qa_index()
 
-# --- Sidebar ---
 st.sidebar.header(T(lang, "sidebar_header"))
+rad_type = st.sidebar.selectbox(T(lang, "rad_type"), ["Гамма", "Бета", "Альфа", "Нейтроны"], index=0)
 
 k = st.sidebar.slider(T(lang, "k_label"), 0.1, 5.0, 1.0, 0.1)
 r_current = st.sidebar.slider(T(lang, "r_label"), 0.1, 10.0, 2.0, 0.1)
@@ -105,7 +121,7 @@ mat_names = list(MATERIALS.keys())
 for i in range(int(layer_count)):
     col1, col2 = st.sidebar.columns(2)
     with col1:
-        mat = st.selectbox(f"{T(lang, 'material_layer')} {i+1}", mat_names, key=f"mat_{i}")
+        mat = st.selectbox(f"{T(lang, 'material_layer')} {i+1}", mat_names, key=f"mat_{i}", help=HINTS[lang][rad_type])
     with col2:
         th = st.number_input(f"{T(lang, 'thickness_layer')} {i+1}", 0.0, 50.0, 0.0, 0.5, key=f"th_{i}")
     layers.append(ShieldLayer(material=mat, thickness_cm=th))
@@ -113,33 +129,40 @@ for i in range(int(layer_count)):
 st.sidebar.divider()
 st.sidebar.subheader(T(lang, "scenarios_subheader"))
 scenario_name = st.sidebar.text_input(T(lang, "scenario_name"), value="Сценарий 1" if lang=="RU" else "Scenario 1")
+author = st.sidebar.text_input("Автор" if lang=="RU" else "Author", value="")
+note = st.sidebar.text_area("Заметка" if lang=="RU" else "Note", value="")
 if st.sidebar.button(T(lang, "save_scenario")):
     payload = {
         "k": float(k),
         "r_current": float(r_current),
         "D_safe": float(D_safe),
         "layers": [{"material": L.material, "thickness_cm": float(L.thickness_cm)} for L in layers],
+        "radiation_type": rad_type,
+        "author": author,
+        "note": note,
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
         "lang": lang
     }
     try:
         os_path = "scenarios/my_scenarios.json"
+        os.makedirs(os.path.dirname(os_path), exist_ok=True)
         try:
             with open(os_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             data = {}
-        data[scenario_name] = payload
+        scenario_key = scenario_name if f"[{rad_type}]" in scenario_name else f"{scenario_name} [{rad_type}]"
+        data[scenario_key] = payload
         with open(os_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         st.sidebar.success(T(lang, "scenario_saved"))
     except Exception as e:
         st.sidebar.error(f"{T(lang, 'scenario_save_error')}: {e}")
 
-# --- Main ---
 colA, colB = st.columns([1, 2])
 
 with colA:
-    D_now = dose(k, r_current, layers)
+    D_now = dose(k, r_current, layers, radiation_type=rad_type)
     zone = classify_zone(D_now, D_safe)
     st.markdown("### " + T(lang, "current_point"))
     st.metric(label=T(lang, "Dr_metric_label"), value=f"{D_now:.3f}")
@@ -154,7 +177,7 @@ with colA:
 with colB:
     st.markdown("### " + T(lang, "chart_title"))
     r_min, r_max = 0.1, 10.0
-    r, d = dose_curve(k, layers, r_min, r_max, num=400)
+    r, d = dose_curve(k, layers, r_min, r_max, num=400, radiation_type=rad_type)
     ylog = st.checkbox(T(lang, "ylog_checkbox"), value=False)
     fig = go.Figure()
     fig.add_scatter(x=r, y=d, mode="lines", name="D(r)")
@@ -173,8 +196,7 @@ with colB:
         st.caption(f"{T(lang, 'export_png_unavailable')}: {e}")
     # CSV export
     df = pd.DataFrame({"r": r, "D": d})
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    st.download_button(T(lang, "export_csv_button"), data=csv_bytes,
+    st.download_button(T(lang, "export_csv_button"), data=df.to_csv(index=False).encode("utf-8"),
                        file_name="dose_curve.csv", mime="text/csv")
 
 st.divider()

@@ -67,9 +67,18 @@ else:
         return [ShieldLayer(material=L['material'], thickness_cm=float(L['thickness_cm'])) for L in raw]
 
     A = sc[n1]; B = sc[n2]
+    # Metadata
+    metaA = {k: A.get(k) for k in ["radiation_type", "author", "note", "saved_at"]}
+    metaB = {k: B.get(k) for k in ["radiation_type", "author", "note", "saved_at"]}
+    st.caption(f"A: type={metaA.get('radiation_type')}, author={metaA.get('author')}, saved_at={metaA.get('saved_at')}")
+    if metaA.get("note"):
+        st.caption(f"A note: {metaA.get('note')}")
+    st.caption(f"B: type={metaB.get('radiation_type')}, author={metaB.get('author')}, saved_at={metaB.get('saved_at')}")
+    if metaB.get("note"):
+        st.caption(f"B note: {metaB.get('note')}")
     layersA = mk_layers(A["layers"]); layersB = mk_layers(B["layers"])
-    rA, dA = dose_curve(A["k"], layersA, 0.1, 10.0, num=400)
-    rB, dB = dose_curve(B["k"], layersB, 0.1, 10.0, num=400)
+    rA, dA = dose_curve(A["k"], layersA, 0.1, 10.0, num=400, radiation_type=A.get("radiation_type", "Гамма"))
+    rB, dB = dose_curve(B["k"], layersB, 0.1, 10.0, num=400, radiation_type=B.get("radiation_type", "Гамма"))
 
     fig = go.Figure()
     fig.add_scatter(x=rA, y=dA, mode="lines", name=f"{n1}")
@@ -89,15 +98,14 @@ else:
     except Exception as e:
         st.caption(f"{T(lang, 'png_unavailable')}: {e}")
 
-    # CSV export (align on rA grid; also include rB for clarity)
+    # CSV export on rA grid
     df = pd.DataFrame({"r": rA, f"D_{n1}": dA})
-    # Interpolate/nearest for B on rA grid
     def interp(r_arr, d_arr, r):
         i = int(np.clip(np.searchsorted(r_arr, r), 0, len(r_arr)-1))
         return float(d_arr[i])
     df[f"D_{n2}"] = [interp(rB, dB, rv) for rv in rA]
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    st.download_button(T(lang, "export_csv"), data=csv_bytes, file_name="comparison.csv", mime="text/csv")
+    st.download_button(T(lang, "export_csv"), data=df.to_csv(index=False).encode("utf-8"),
+                       file_name="comparison.csv", mime="text/csv")
 
     r_probe = st.slider(T(lang, "probe"), 0.1, 10.0, 2.0, 0.1)
     def interp_val(r_arr, d_arr, r):
