@@ -238,6 +238,81 @@ LANG_DISPLAY = {"RU": "Русский", "EN": "English", "ZH": "简体中文"}
 LANG_SELECTOR_LABEL = "Язык / Language / 语言"
 
 
+PARAM_CONFIG = {
+    "k": {
+        "value": "k_value",
+        "slider": "k_slider",
+        "formula": "k_formula",
+        "pending_formula": "pending_k_from_formula",
+        "pending_slider": "pending_k_from_slider",
+        "formula_flag": "sync_k_from_formula",
+        "slider_flag": "sync_k_from_slider",
+        "default": 1.0,
+    },
+    "r": {
+        "value": "r_value",
+        "slider": "r_slider",
+        "formula": "r_formula",
+        "pending_formula": "pending_r_from_formula",
+        "pending_slider": "pending_r_from_slider",
+        "formula_flag": "sync_r_from_formula",
+        "slider_flag": "sync_r_from_slider",
+        "default": 2.0,
+    },
+}
+
+
+def queue_formula_sync(param: str) -> None:
+    cfg = PARAM_CONFIG[param]
+    formula_key = cfg["formula"]
+    value_key = cfg["value"]
+    new_val = float(st.session_state.get(formula_key, st.session_state.get(value_key, cfg["default"])))
+    st.session_state[cfg["pending_formula"]] = new_val
+    st.session_state[cfg["formula_flag"]] = True
+
+
+def queue_slider_sync(param: str) -> None:
+    cfg = PARAM_CONFIG[param]
+    slider_key = cfg["slider"]
+    value_key = cfg["value"]
+    new_val = float(st.session_state.get(slider_key, st.session_state.get(value_key, cfg["default"])))
+    st.session_state[cfg["pending_slider"]] = new_val
+    st.session_state[cfg["slider_flag"]] = True
+
+
+def ensure_parameter_state(param: str) -> None:
+    cfg = PARAM_CONFIG[param]
+    default = cfg["default"]
+    value_key = cfg["value"]
+    slider_key = cfg["slider"]
+    formula_key = cfg["formula"]
+    if value_key not in st.session_state:
+        st.session_state[value_key] = default
+    if slider_key not in st.session_state:
+        st.session_state[slider_key] = float(st.session_state[value_key])
+    if formula_key not in st.session_state:
+        st.session_state[formula_key] = float(st.session_state[value_key])
+
+
+def apply_pending_syncs(param: str) -> None:
+    cfg = PARAM_CONFIG[param]
+    if st.session_state.get(cfg["formula_flag"]):
+        new_val = float(
+            st.session_state.get(cfg["pending_formula"], st.session_state[cfg["value"]])
+        )
+        st.session_state[cfg["value"]] = new_val
+        st.session_state[cfg["slider"]] = new_val
+        st.session_state[cfg["formula"]] = new_val
+        st.session_state[cfg["formula_flag"]] = False
+    if st.session_state.get(cfg["slider_flag"]):
+        new_val = float(
+            st.session_state.get(cfg["pending_slider"], st.session_state[cfg["value"]])
+        )
+        st.session_state[cfg["value"]] = new_val
+        st.session_state[cfg["formula"]] = new_val
+        st.session_state[cfg["slider_flag"]] = False
+
+
 def get_radiation_options(lang: str) -> tuple[list[str], list[str]]:
     options = RAD_TYPE_OPTIONS.get(lang, RAD_TYPE_OPTIONS["RU"])
     labels = [label for label, _ in options]
@@ -403,14 +478,14 @@ lang = st.sidebar.selectbox(
     format_func=lambda code: LANG_DISPLAY.get(code, code),
 )
 
-if "k_value" not in st.session_state:
-    st.session_state["k_value"] = 1.0
-if "r_value" not in st.session_state:
-    st.session_state["r_value"] = 2.0
+for param in ("k", "r"):
+    ensure_parameter_state(param)
+    apply_pending_syncs(param)
+
 if "D_safe_value" not in st.session_state:
     st.session_state["D_safe_value"] = 0.2
 if "r_eval" not in st.session_state:
-    st.session_state["r_eval"] = st.session_state["r_value"]
+    st.session_state["r_eval"] = float(st.session_state[PARAM_CONFIG["r"]["value"]])
 
 @st.cache_resource
 def load_qa_index():
@@ -426,8 +501,31 @@ rad_labels, rad_values = get_radiation_options(lang)
 selected_label = st.sidebar.selectbox(T(lang, "rad_type"), rad_labels, index=0)
 rad_type = rad_values[rad_labels.index(selected_label)]
 
-k = st.sidebar.slider(T(lang, "k_label"), 0.1, 5.0, st.session_state["k_value"], 0.1, key="k_value")
-r_current = st.sidebar.slider(T(lang, "r_label"), 0.1, 10.0, st.session_state["r_value"], 0.1, key="r_value")
+k_slider_val = float(st.session_state[PARAM_CONFIG["k"]["slider"]])
+k = st.sidebar.slider(
+    T(lang, "k_label"),
+    0.1,
+    5.0,
+    k_slider_val,
+    0.1,
+    key=PARAM_CONFIG["k"]["slider"],
+    on_change=queue_slider_sync,
+    args=("k",),
+)
+st.session_state[PARAM_CONFIG["k"]["value"]] = float(st.session_state[PARAM_CONFIG["k"]["slider"]])
+
+r_slider_val = float(st.session_state[PARAM_CONFIG["r"]["slider"]])
+r_current = st.sidebar.slider(
+    T(lang, "r_label"),
+    0.1,
+    10.0,
+    r_slider_val,
+    0.1,
+    key=PARAM_CONFIG["r"]["slider"],
+    on_change=queue_slider_sync,
+    args=("r",),
+)
+st.session_state[PARAM_CONFIG["r"]["value"]] = float(st.session_state[PARAM_CONFIG["r"]["slider"]])
 D_safe = st.sidebar.slider(T(lang, "D_safe_label"), 0.01, 1.0, st.session_state["D_safe_value"], 0.01, key="D_safe_value")
 
 st.sidebar.subheader(T(lang, "shielding_subheader"))
@@ -487,24 +585,28 @@ st.caption(T(lang, "formula_description"))
 
 formula_cols = st.columns(3)
 with formula_cols[0]:
-    k_formula_default = float(st.session_state.get("k_formula", k))
+    k_formula_default = float(st.session_state.get(PARAM_CONFIG["k"]["formula"], k))
     st.number_input(
         T(lang, "formula_k_label"),
         min_value=0.1,
         max_value=5.0,
         value=k_formula_default,
         step=0.1,
-        key="k_formula",
+        key=PARAM_CONFIG["k"]["formula"],
+        on_change=queue_formula_sync,
+        args=("k",),
     )
 with formula_cols[1]:
-    r_formula_default = float(st.session_state.get("r_formula", r_current))
+    r_formula_default = float(st.session_state.get(PARAM_CONFIG["r"]["formula"], r_current))
     st.number_input(
         T(lang, "formula_r_label"),
         min_value=0.1,
         max_value=10.0,
         value=r_formula_default,
         step=0.1,
-        key="r_formula",
+        key=PARAM_CONFIG["r"]["formula"],
+        on_change=queue_formula_sync,
+        args=("r",),
     )
 with formula_cols[2]:
     r_eval_default = float(st.session_state.get("r_eval", r_current))
@@ -517,21 +619,18 @@ with formula_cols[2]:
         key="r_eval",
     )
 
-st.session_state["k_value"] = float(st.session_state["k_formula"])
-st.session_state["r_value"] = float(st.session_state["r_formula"])
-k = float(st.session_state["k_value"])
-r_current = float(st.session_state["r_value"])
-r_eval_value = float(st.session_state["r_eval"])
+k_formula_value = float(st.session_state.get(PARAM_CONFIG["k"]["formula"], k))
+r_eval_value = float(st.session_state.get("r_eval", r_current))
 
 total_mu, mu_terms = compute_total_attenuation(layers, rad_type)
 if mu_terms:
     mu_expr = " + ".join([f"{mu:.2f} \\cdot {th:.2f}" for _, mu, th, _ in mu_terms])
 else:
     mu_expr = "0"
-latex_formula = rf"D(r) = \frac{{{k:.2f}}}{{r^2}} \cdot \exp(-({mu_expr}))"
+latex_formula = rf"D(r) = \frac{{{k_formula_value:.2f}}}{{r^2}} \cdot \exp(-({mu_expr}))"
 st.latex(latex_formula)
 st.caption(f"{T(lang, 'formula_mu_label')}: {total_mu:.2f}")
-dose_at_eval = dose(k, r_eval_value, layers, radiation_type=rad_type)
+dose_at_eval = dose(k_formula_value, r_eval_value, layers, radiation_type=rad_type)
 st.metric(T(lang, "formula_result_label"), f"{dose_at_eval:.3f}")
 if mu_terms:
     breakdown_lines = [
