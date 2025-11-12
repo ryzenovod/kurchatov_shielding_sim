@@ -238,11 +238,6 @@ LANG_DISPLAY = {"RU": "Русский", "EN": "English", "ZH": "简体中文"}
 LANG_SELECTOR_LABEL = "Язык / Language / 语言"
 
 
-def trigger_sync(flag_key: str) -> None:
-    """Mark that a slider should adopt the value from the formula input."""
-    st.session_state[flag_key] = True
-
-
 def get_radiation_options(lang: str) -> tuple[list[str], list[str]]:
     options = RAD_TYPE_OPTIONS.get(lang, RAD_TYPE_OPTIONS["RU"])
     labels = [label for label, _ in options]
@@ -417,18 +412,6 @@ if "D_safe_value" not in st.session_state:
 if "r_eval" not in st.session_state:
     st.session_state["r_eval"] = st.session_state["r_value"]
 
-if st.session_state.get("sync_k_from_formula"):
-    st.session_state["k_value"] = float(
-        st.session_state.get("k_formula", st.session_state["k_value"])
-    )
-    st.session_state["sync_k_from_formula"] = False
-
-if st.session_state.get("sync_r_from_formula"):
-    st.session_state["r_value"] = float(
-        st.session_state.get("r_formula", st.session_state["r_value"])
-    )
-    st.session_state["sync_r_from_formula"] = False
-
 @st.cache_resource
 def load_qa_index():
     try:
@@ -512,8 +495,6 @@ with formula_cols[0]:
         value=k_formula_default,
         step=0.1,
         key="k_formula",
-        on_change=trigger_sync,
-        args=("sync_k_from_formula",),
     )
 with formula_cols[1]:
     r_formula_default = float(st.session_state.get("r_formula", r_current))
@@ -524,8 +505,6 @@ with formula_cols[1]:
         value=r_formula_default,
         step=0.1,
         key="r_formula",
-        on_change=trigger_sync,
-        args=("sync_r_from_formula",),
     )
 with formula_cols[2]:
     r_eval_default = float(st.session_state.get("r_eval", r_current))
@@ -538,18 +517,21 @@ with formula_cols[2]:
         key="r_eval",
     )
 
-k_formula_value = float(st.session_state.get("k_formula", k))
-r_eval_value = float(st.session_state.get("r_eval", r_current))
+st.session_state["k_value"] = float(st.session_state["k_formula"])
+st.session_state["r_value"] = float(st.session_state["r_formula"])
+k = float(st.session_state["k_value"])
+r_current = float(st.session_state["r_value"])
+r_eval_value = float(st.session_state["r_eval"])
 
 total_mu, mu_terms = compute_total_attenuation(layers, rad_type)
 if mu_terms:
     mu_expr = " + ".join([f"{mu:.2f} \\cdot {th:.2f}" for _, mu, th, _ in mu_terms])
 else:
     mu_expr = "0"
-latex_formula = rf"D(r) = \frac{{{k_formula_value:.2f}}}{{r^2}} \cdot \exp(-({mu_expr}))"
+latex_formula = rf"D(r) = \frac{{{k:.2f}}}{{r^2}} \cdot \exp(-({mu_expr}))"
 st.latex(latex_formula)
 st.caption(f"{T(lang, 'formula_mu_label')}: {total_mu:.2f}")
-dose_at_eval = dose(k_formula_value, r_eval_value, layers, radiation_type=rad_type)
+dose_at_eval = dose(k, r_eval_value, layers, radiation_type=rad_type)
 st.metric(T(lang, "formula_result_label"), f"{dose_at_eval:.3f}")
 if mu_terms:
     breakdown_lines = [
