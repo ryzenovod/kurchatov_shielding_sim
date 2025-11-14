@@ -20,6 +20,7 @@ TEXTS = {
     "RU": {
         "page_title": "Экранирование и доза — симулятор",
         "language_selector": "Язык / Language",
+        "app_title": "Интерактивный веб-симулятор «Экранирование и излучение»",
         "sidebar_header": "Параметры источника и экрана",
         "k_label": "Мощность источника k (отн.)",
         "r_label": "Текущее расстояние r (м)",
@@ -77,6 +78,7 @@ TEXTS = {
     "EN": {
         "page_title": "Shielding & Dose — Simulator",
         "language_selector": "Language",
+        "app_title": "Interactive Web Simulator \"Shielding & Radiation\"",
         "sidebar_header": "Source & Shielding Parameters",
         "k_label": "Source strength k (rel.)",
         "r_label": "Current distance r (m)",
@@ -134,6 +136,7 @@ TEXTS = {
     "ZH": {
         "page_title": "屏蔽与剂量模拟器",
         "language_selector": "语言",
+        "app_title": "交互式网络模拟器“屏蔽与辐射”",
         "sidebar_header": "源与屏蔽参数",
         "k_label": "源强 k (相对)",
         "r_label": "当前距离 r (米)",
@@ -477,6 +480,12 @@ lang = st.sidebar.selectbox(
     index=0,
     format_func=lambda code: LANG_DISPLAY.get(code, code),
 )
+
+MAIN_APP_TITLE = "Интерактивный веб-симулятор «Экранирование и излучение»"
+
+st.title(MAIN_APP_TITLE)
+if lang != "RU":
+    st.caption(T(lang, "app_title"))
 
 for param in ("k", "r"):
     ensure_parameter_state(param)
